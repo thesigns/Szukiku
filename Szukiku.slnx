@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Szukiku.Cli/Szukiku.Cli.csproj" />
+    <Project Path="src/Szukiku.Core/Szukiku.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Szukiku.Tests/Szukiku.Tests.csproj" />
+  </Folder>
+</Solution>

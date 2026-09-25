@@ -1,0 +1,27 @@
+# Domyślnie normalizuj końce linii tekstu (LF w repozytorium)
+* text=auto
+
+# Kod i projekty
+*.cs      text diff=csharp
+*.csproj  text
+*.slnx    text
+*.md      text diff=markdown
+*.json    text
+*.xml     text
+
+# Skrypty Windows muszą mieć CRLF
+*.ps1     text eol=crlf
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+
+# Skrypty POSIX muszą mieć LF
+*.sh      text eol=lf
+
+# Pliki binarne
+*.epub    binary
+*.png     binary
+*.jpg     binary
+*.ttf     binary
+*.exe     binary
+*.dll     binary
+*.pdb     binary

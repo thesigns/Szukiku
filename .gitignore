@@ -1,0 +1,26 @@
+# Wyniki kompilacji
+bin/
+obj/
+publish/
+
+# Książki wejściowe i wyniki działania programu
+*.epub
+*.haiku.md
+
+# Pliki lokalne IDE i użytkownika
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# Wyniki testów i pokrycia
+TestResults/
+coverage*.xml
+*.coverage
+
+# System
+Thumbs.db
+Desktop.ini
+.DS_Store
