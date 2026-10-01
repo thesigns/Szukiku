@@ -53,6 +53,7 @@ public static class HaikuFinder
     public static Haiku? TryMatch(string sentence, string chapter = "", int position = 0)
     {
         if (sentence.Any(char.IsDigit)) return null;
+        if (IsFragment(sentence)) return null;
 
         var groups = BuildGroups(sentence);
         if (groups == null) return null;
@@ -146,6 +147,18 @@ public static class HaikuFinder
         while (start < end && !char.IsLetter(token[start])) start++;
         while (end > start && !char.IsLetter(token[end - 1])) end--;
         return token[start..end];
+    }
+
+    /// <summary>
+    /// Kawałek dłuższego zdania: zaczyna się małą literą (ciąg dalszy z poprzedniego akapitu,
+    /// „— czyż dający nie powinien…”) albo ma niesparowany nawias (zdanie ucięte w środku wtrącenia).
+    /// </summary>
+    static bool IsFragment(string sentence)
+    {
+        var firstLetter = sentence.FirstOrDefault(char.IsLetter);
+        if (char.IsLower(firstLetter)) return true;
+        return sentence.Count(c => c == '(') != sentence.Count(c => c == ')')
+               || sentence.Count(c => c == '[') != sentence.Count(c => c == ']');
     }
 
     static bool IsRomanNumeral(string word) =>

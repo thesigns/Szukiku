@@ -26,10 +26,11 @@ public static class EpubReader
 
     // Klasy i id oznaczające przypisy, stopki i materiały wydawcy (m.in. konwencje Wolnych Lektur).
     static readonly HashSet<string> SkippedMarkers =
-        ["anchor", "annotation", "footnotes", "footnote", "fundraising", "info", "minor-info", "title-page", "noteref"];
+        ["anchor", "annotation", "footnotes", "footnote", "fundraising", "info", "minor-info", "title-page", "noteref",
+         "motto_podpis"];
 
-    // Nagłówki, które nie są rozdziałami (np. tytuł książki powtórzony w środku).
-    static readonly HashSet<string> IgnoredHeadingClasses = ["title", "intitle", "author"];
+    // Nagłówki, które nie są rozdziałami (np. tytuł książki na stronie tytułowej, podtytuł).
+    static readonly HashSet<string> IgnoredHeadingClasses = ["title", "insubtitle", "author"];
 
     static readonly HashSet<string> BlockElements = ["p", "li", "blockquote", "dd", "dt"];
 
@@ -43,14 +44,15 @@ public static class EpubReader
         var opfDir = GetDirectory(opfPath);
 
         var metadata = opf.Root!.Element(OpfNs + "metadata");
-        var title = metadata?.Element(DcNs + "title")?.Value.Trim() ?? Path.GetFileNameWithoutExtension(path);
-        var author = metadata?.Element(DcNs + "creator")?.Value.Trim() ?? "";
+        // Tytuł bywa w OPF złamany na kilka linii („Podróż po rzece\nOrinoko”).
+        var title = NormalizeWhitespace(metadata?.Element(DcNs + "title")?.Value ?? Path.GetFileNameWithoutExtension(path));
+        var author = NormalizeWhitespace(metadata?.Element(DcNs + "creator")?.Value ?? "");
 
         var manifest = opf.Descendants(OpfNs + "item").ToDictionary(
             i => i.Attribute("id")!.Value,
             i => (Href: i.Attribute("href")!.Value, Properties: i.Attribute("properties")?.Value ?? ""));
 
-        var state = new ReadState();
+        var state = new ReadState(title);
         foreach (var itemRef in opf.Descendants(OpfNs + "itemref"))
         {
             if (itemRef.Attribute("linear")?.Value == "no") continue;
@@ -66,8 +68,9 @@ public static class EpubReader
         return new EpubBook(title, author, state.Blocks);
     }
 
-    sealed class ReadState
+    sealed class ReadState(string bookTitle)
     {
+        public readonly string BookTitle = bookTitle;
         public readonly List<TextBlock> Blocks = [];
         // Poziom nagłówka → tekst; etykieta rozdziału to złączenie wszystkich poziomów.
         public readonly SortedDictionary<int, string> Headings = [];
@@ -85,7 +88,19 @@ public static class EpubReader
             {
                 var classes = Classes(child);
                 if (classes.Any(IgnoredHeadingClasses.Contains)) continue;
-                state.Headings[level] = ExtractText(child);
+                var text = ExtractText(child);
+                if (classes.Contains("intitle"))
+                {
+                    // Tytuł utworu wewnątrz książki: w zbiorach to tytuł części lub opowiadania
+                    // („Część pierwsza. Jesień”), w pojedynczym utworze — powtórzony tytuł książki.
+                    if (SameTitle(text, state.BookTitle)) continue;
+                    level = 1;
+                }
+                else if (IsSectionNumber(text))
+                {
+                    level = SectionNumberLevel(state, level);
+                }
+                state.Headings[level] = text;
                 foreach (var deeper in state.Headings.Keys.Where(k => k > level).ToList())
                     state.Headings.Remove(deeper);
             }
@@ -98,12 +113,48 @@ public static class EpubReader
                 // Strofa: wersy łączymy w jeden blok, żeby zdania mogły przechodzić przez granice wersów.
                 AddBlock(state, ExtractText(child));
             }
+            else if (HasOwnText(child))
+            {
+                // Element z gołym tekstem w środku, np. werset biblijny <div class="verse-relig">.
+                AddBlock(state, ExtractText(child));
+            }
             else
             {
                 Walk(child, state);
             }
         }
     }
+
+    /// <summary>Porównanie tytułów niezależne od wielkości liter, interpunkcji i kolejności słów.</summary>
+    static bool SameTitle(string a, string b)
+    {
+        static string[] Words(string s) =>
+            [.. new string([.. s.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : ' ')])
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries).Order()];
+        return Words(a).SequenceEqual(Words(b));
+    }
+
+    /// <summary>Sam numer podrozdziału, np. „1.”, „12” (oraz literówka „3O.” z Wolnych Lektur).</summary>
+    static bool IsSectionNumber(string text)
+    {
+        var number = text.TrimEnd('.');
+        return number.Length > 0 && char.IsAsciiDigit(number[0]) && number.All(c => char.IsAsciiDigit(c) || c == 'O');
+    }
+
+    /// <summary>
+    /// Numerowany podrozdział należy do ostatniego nagłówka z tytułem, nawet jeśli w EPUB ma wyższy poziom
+    /// (w „Tako rzecze Zaratustra” „1.” to h2 pod rozdziałem h3). Wyjątek: gdy numery są rozdziałami
+    /// nadrzędnymi (numer leży powyżej nagłówka z tytułem), zostaje poziom z EPUB.
+    /// </summary>
+    static int SectionNumberLevel(ReadState state, int level)
+    {
+        var titled = state.Headings.Where(h => !IsSectionNumber(h.Value)).Select(h => h.Key).DefaultIfEmpty(0).Max();
+        var numbersAreChapters = state.Headings.Any(h => h.Key < titled && IsSectionNumber(h.Value));
+        return titled >= level && !numbersAreChapters ? titled + 1 : level;
+    }
+
+    static bool HasOwnText(XElement e) =>
+        e.Nodes().OfType<XText>().Any(t => !string.IsNullOrWhiteSpace(t.Value));
 
     static void AddBlock(ReadState state, string text)
     {

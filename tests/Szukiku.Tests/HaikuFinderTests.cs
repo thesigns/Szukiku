@@ -52,6 +52,21 @@ public class HaikuFinderTests
         Assert.Null(HaikuFinder.TryMatch(sentence));
     }
 
+    [Theory]
+    [InlineData("— czyż dający nie powinien dziękować, że biorący przyjął?")] // ciąg dalszy z poprzedniego akapitu
+    [InlineData("Persius [=zamieszkaj z sobą, a poznasz, jak twój zasób jest szczupły.")] // ucięte wtrącenie
+    [InlineData("Szlachetnej rasy (nie ukryje się nawet pod łachmanami.")]
+    public void RejectsSentenceFragments(string sentence)
+    {
+        Assert.Null(HaikuFinder.TryMatch(sentence));
+    }
+
+    [Fact]
+    public void AcceptsBalancedBrackets()
+    {
+        Assert.NotNull(HaikuFinder.TryMatch("Szlachetnej rasy [nie] ukryje się nawet pod łachmanami."));
+    }
+
     [Fact]
     public void RemovesUnpairedClosingQuote()
     {
